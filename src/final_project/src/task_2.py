@@ -40,7 +40,7 @@ class Navigation:
         self.cov_check = False
 
         # From Jupyter Notebook
-        self.mp = MapProcessor('/home/ericokeefe/PycharmProjects/ME597AS/src/lab_4_pkg/maps/map')
+        self.mp = MapProcessor('/home/ericokeefe/PycharmProjects/PROJ_ME597AS/src/final_project/maps/map')
         self.mp.inflate_map(self.mp.rect_kernel(6, 1))
         self.mp.get_graph_from_map()
 
