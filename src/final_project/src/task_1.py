@@ -215,7 +215,21 @@ class Explorer:
         self.move_ttbot(self.speed, self.steer)
 
     def right_corner(self):
-        print('right')
+        self.speed = 0.1
+        self.steer = -0.5
+
+        #if self.right_dist < (self.desired_spacing + self.tolerance) and (self.right_dist < self.right_dist_old):
+        if (self.right_dist > self.right_dist_old) or (self.right_dist < (self.desired_spacing + self.tolerance)):
+            self.speed = 0
+            self.steer = 0
+            self.state = 3
+
+        self.right_dist_old = self.right_dist
+        self.move_ttbot(self.speed, self.steer)
+
+        if self.front_dist < (self.desired_spacing + (5 * self.tolerance)):
+            self.state = 4
+
 
     def run(self):
         """ Main loop of node to run
