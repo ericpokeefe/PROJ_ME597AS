@@ -39,11 +39,14 @@ class Explorer:
         self.right_dist_min = 100
 
         # follow wall
-        self.desired_spacing = 0.75
-        self.tolerance = 0.05
+        self.desired_spacing = 0.5
+        self.tolerance = 0.01
         self.right_dist_old = 0
         self.steer = 0
         self.speed = 0
+
+        # left corner
+        self.back_dist_old = 100
 
         # state machine
         self.state = 1
@@ -51,6 +54,8 @@ class Explorer:
             1: 'Approach Wall',
             2: 'Align Wall',
             3: 'Follow Wall',
+            4: 'Left Corner',
+            5: 'Right Corner',
         }
 
     def init_app(self):
@@ -151,26 +156,13 @@ class Explorer:
         # state 2 in state machine
         # rotates right until self.front_dist is minimized
 
-        if self.right_dist > (self.desired_spacing + (2 * self.tolerance)):
+        if self.right_dist > (self.desired_spacing + (5 * self.tolerance)):
             self.move_ttbot(0, 0.3)
         else:
             self.move_ttbot(0, 0)
             self.state = 3
-            '''
-            if self.right_dist < self.right_dist_min:
-                self.move_ttbot(0, 0.1)
-                self.right_dist_min = self.right_dist
-            else:
-                self.move_ttbot(0, 0)
-                self.state = 3
-            '''
 
-
-    def follow_wall(self):
-        # state 3 in state machine
-        # turns left until self.right_dist is minimized
-        # drives straight with left/right corrections to follow wall on right side of vehicle
-
+    def drive_straight(self):
         # drive straight with corrections
         if self.right_dist < (self.desired_spacing - self.tolerance):
             if self.right_dist > self.right_dist_old:
@@ -188,15 +180,42 @@ class Explorer:
             self.speed = 0.2
             self.steer = 0
 
-        if self.front_dist < self.desired_spacing:
-            self.speed = 0
-            self.steer = 0
-
         self.right_dist_old = self.right_dist
         self.move_ttbot(self.speed, self.steer)
 
+    def follow_wall(self):
+        # state 3 in state machine
+        # turns left until self.right_dist is minimized
+        # drives straight with left/right corrections to follow wall on right side of vehicle
 
+        if self.front_dist < (self.desired_spacing + (5 * self.tolerance)):
+            # turn left inside corner
+            self.move_ttbot(0, 0)
+            self.state = 4
+        elif self.right_dist > (2 * self.desired_spacing):
+            # turn right around corner
+            self.move_ttbot(0, 0)
+            self.state = 5
+        else:
+            self.drive_straight()
 
+    def left_corner(self):
+        # turn left inside corner
+
+        self.speed = 0
+        self.steer = 0.3
+
+        if (self.right_dist > self.right_dist_old) and (self.back_dist > self.back_dist_old):
+            self.move_ttbot(0, 0)
+            self.state = 3
+
+        self.right_dist_old = self.right_dist
+        self.back_dist_old = self.back_dist
+
+        self.move_ttbot(self.speed, self.steer)
+
+    def right_corner(self):
+        print('right')
 
     def run(self):
         """ Main loop of node to run
@@ -212,6 +231,10 @@ class Explorer:
                 self.align_wall()
             elif self.state == 3:
                 self.follow_wall()
+            elif self.state == 4:
+                self.left_corner()
+            elif self.state == 5:
+                self.right_corner()
             else:
                 self.move_ttbot(0, 0)
 
