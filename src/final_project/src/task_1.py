@@ -18,6 +18,41 @@ class Explorer:
         self.node_name = node_name
         self.rate = 0
 
+        # Path planner/follower related variables
+        self.path = Path()
+        self.goal_pose = PoseStamped()
+        self.ttbot_pose = PoseStamped()
+
+        # Covariance check
+        self.cov_check = False
+
+        # initialization for laser scan related items
+        self.fov = 1  # (total fov / 2) - 1
+        self.front_dist = 100
+        self.left_dist = 100
+        self.back_dist = 100
+        self.right_dist = 100
+        self.laser_range_min = 100
+        self.laser_range_min_index = None
+
+        # align wall
+        self.right_dist_min = 100
+
+        # follow wall
+        self.desired_spacing = 0.75
+        self.tolerance = 0.05
+        self.right_dist_old = 0
+        self.steer = 0
+        self.speed = 0
+
+        # state machine
+        self.state = 1
+        self.state_dict = {
+            1: 'Approach Wall',
+            2: 'Align Wall',
+            3: 'Follow Wall',
+        }
+
     def init_app(self):
         """Node initialization
         """
@@ -63,11 +98,16 @@ class Explorer:
         '''
 
         # find front, left, back, right distances
-        self.fov = 2  # (total fov / 2) - 1
-        self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)], self.laser_ranges[(359 - (self.fov - 1)):359]))
+        # self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)], self.laser_ranges[(359 - (self.fov - 1)):359]))
+        self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)]), self.laser_ranges[359])  # use if fov = 1
         self.left_dist = min(self.laser_ranges[(89 - self.fov):(89 + self.fov)])
         self.back_dist = min(self.laser_ranges[(179 - self.fov):(179 + self.fov)])
         self.right_dist = min(self.laser_ranges[(269 - self.fov):(269 + self.fov)])
+
+        # self.front_dist = self.laser_ranges[0]
+        # self.left_dist = self.laser_ranges[89]
+        # self.back_dist = self.laser_ranges[179]
+        # self.right_dist = self.laser_ranges[269]
 
         rospy.loginfo('front: {:.2f}, left: {:.2f}, back: {:.2f}, right: {:.2f}'.format(self.front_dist,
                                                                                         self.left_dist,
@@ -85,51 +125,102 @@ class Explorer:
 
         rospy.loginfo('range_min = {:.4f}, min_index: {:d}'.format(self.laser_range_min, self.laser_range_min_index))
 
-    def move_ttbot(self, speed, steer_angle):
+    def move_ttbot(self, speed, steer):
         """! Function to move turtlebot passing directly a speed and steering angle.
         @param  speed     Desired speed.
-        @param  steer_angle   Desired steering angle.
+        @param  steer   Desired steering angle.
         """
         cmd_vel = Twist()
 
         cmd_vel.linear.x = speed
-        cmd_vel.angular.z = steer_angle
+        cmd_vel.angular.z = steer
 
         self.cmd_vel_pub.publish(cmd_vel)
-
-    def find_wall(self):
-        # state 0 in state machine
-        # rotates right until self.front_dist is minimized
-
-        return
 
     def approach_wall(self):
         # state 1 in state machine
         # drives straight until self.front_dist hits desired distance
 
-        return
+        if self.front_dist > self.desired_spacing:
+            self.move_ttbot(0.2, 0)
+        else:
+            self.move_ttbot(0, 0)
+            self.state = 2
+
+    def align_wall(self):
+        # state 2 in state machine
+        # rotates right until self.front_dist is minimized
+
+        if self.right_dist > (self.desired_spacing + (2 * self.tolerance)):
+            self.move_ttbot(0, 0.3)
+        else:
+            self.move_ttbot(0, 0)
+            self.state = 3
+            '''
+            if self.right_dist < self.right_dist_min:
+                self.move_ttbot(0, 0.1)
+                self.right_dist_min = self.right_dist
+            else:
+                self.move_ttbot(0, 0)
+                self.state = 3
+            '''
+
 
     def follow_wall(self):
-        # state 2 in state machine
+        # state 3 in state machine
         # turns left until self.right_dist is minimized
         # drives straight with left/right corrections to follow wall on right side of vehicle
 
-        return
+        # drive straight with corrections
+        if self.right_dist < (self.desired_spacing - self.tolerance):
+            if self.right_dist > self.right_dist_old:
+                self.steer = -0.2
+            elif self.right_dist < self.right_dist_old:
+                self.steer = 0.3
+            self.speed = 0.2
+        elif self.right_dist > (self.desired_spacing + self.tolerance):
+            if self.right_dist > self.right_dist_old:
+                self.steer = -0.3
+            elif self.right_dist < self.right_dist_old:
+                self.steer = 0.2
+            self.speed = 0.2
+        else:
+            self.speed = 0.2
+            self.steer = 0
+
+        if self.front_dist < self.desired_spacing:
+            self.speed = 0
+            self.steer = 0
+
+        self.right_dist_old = self.right_dist
+        self.move_ttbot(self.speed, self.steer)
+
+
+
 
     def run(self):
         """ Main loop of node to run
         """
         while not rospy.is_shutdown():
-            #rospy.loginfo('Explorer node alive ...')
+            # rospy.loginfo('Explorer node alive ...')
 
-            # TODO: implement state machine
+            # State Machine
+            rospy.loginfo('State: {:d} - {:s}'.format(self.state, self.state_dict[self.state]))
+            if self.state == 1:
+                self.approach_wall()
+            elif self.state == 2:
+                self.align_wall()
+            elif self.state == 3:
+                self.follow_wall()
+            else:
+                self.move_ttbot(0, 0)
 
             self.rate.sleep()
         # rospy.signal_shutdown("[{}] Finished Cleanly".format(self.name))
 
 
 if __name__ == '__main__':
-    ex = Explorer(node_name='explorer')
+    ex = Explorer(node_name='Explorer')
     ex.init_app()
 
     try:
