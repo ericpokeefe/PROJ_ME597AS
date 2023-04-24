@@ -16,6 +16,7 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Pose, Twis
 
 from map_astar import MapProcessor, AStar
 
+
 class Navigation:
     """! Navigation node class.
     This class should serve as a template to implement the path planning and
