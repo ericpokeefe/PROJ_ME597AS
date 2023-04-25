@@ -27,7 +27,7 @@ class Explorer:
         self.cov_check = False
 
         # initialization for laser scan related items
-        self.fov = 1  # (total fov / 2) - 1
+        self.fov = 2  # (total fov / 2) - 1
         self.front_dist = 100
         self.left_dist = 100
         self.back_dist = 100
@@ -104,7 +104,7 @@ class Explorer:
 
         # find front, left, back, right distances
         # self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)], self.laser_ranges[(359 - (self.fov - 1)):359]))
-        self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)]), self.laser_ranges[359])  # use if fov = 1
+        self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)]), min(self.laser_ranges[358:359]))  # use if fov = 1
         self.left_dist = min(self.laser_ranges[(89 - self.fov):(89 + self.fov)])
         self.back_dist = min(self.laser_ranges[(179 - self.fov):(179 + self.fov)])
         self.right_dist = min(self.laser_ranges[(269 - self.fov):(269 + self.fov)])
@@ -156,7 +156,7 @@ class Explorer:
         # state 2 in state machine
         # rotates right until self.front_dist is minimized
 
-        if self.right_dist > (self.desired_spacing + (5 * self.tolerance)):
+        if self.right_dist > (1.5 * self.desired_spacing):
             self.move_ttbot(0, 0.3)
         else:
             self.move_ttbot(0, 0)
@@ -188,11 +188,11 @@ class Explorer:
         # turns left until self.right_dist is minimized
         # drives straight with left/right corrections to follow wall on right side of vehicle
 
-        if self.front_dist < (self.desired_spacing + (5 * self.tolerance)):
+        if self.front_dist < self.desired_spacing:
             # turn left inside corner
             self.move_ttbot(0, 0)
             self.state = 4
-        elif self.right_dist > (2 * self.desired_spacing):
+        elif abs(self.right_dist - self.right_dist_old) > self.desired_spacing:
             # turn right around corner
             self.move_ttbot(0, 0)
             self.state = 5
@@ -216,10 +216,10 @@ class Explorer:
 
     def right_corner(self):
         self.speed = 0.1
-        self.steer = -0.5
+        self.steer = -0.3
 
         #if self.right_dist < (self.desired_spacing + self.tolerance) and (self.right_dist < self.right_dist_old):
-        if (self.right_dist > self.right_dist_old) or (self.right_dist < (self.desired_spacing + self.tolerance)):
+        if self.right_dist < (1.5 * self.desired_spacing):
             self.speed = 0
             self.steer = 0
             self.state = 3
@@ -227,7 +227,7 @@ class Explorer:
         self.right_dist_old = self.right_dist
         self.move_ttbot(self.speed, self.steer)
 
-        if self.front_dist < (self.desired_spacing + (5 * self.tolerance)):
+        if self.front_dist < (1.5 * self.desired_spacing):
             self.state = 4
 
 
