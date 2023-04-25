@@ -237,6 +237,7 @@ class Explorer:
         while not rospy.is_shutdown():
             # rospy.loginfo('Explorer node alive ...')
 
+
             # State Machine
             rospy.loginfo('State: {:d} - {:s}'.format(self.state, self.state_dict[self.state]))
             if self.state == 1:
@@ -253,6 +254,7 @@ class Explorer:
                 self.move_ttbot(0, 0)
 
             self.rate.sleep()
+
         # rospy.signal_shutdown("[{}] Finished Cleanly".format(self.name))
 
 
