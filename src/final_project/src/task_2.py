@@ -42,7 +42,7 @@ class Navigation:
 
         # From Jupyter Notebook
         self.mp = MapProcessor('/home/ericokeefe/PycharmProjects/PROJ_ME597AS/src/final_project/maps/map')
-        self.mp.inflate_map(self.mp.rect_kernel(6, 1))
+        self.mp.inflate_map(self.mp.rect_kernel(10, 1))
         self.mp.get_graph_from_map()
 
     def init_app(self):
@@ -61,7 +61,6 @@ class Navigation:
         # Publishers
         self.path_pub = rospy.Publisher('global_plan', Path, queue_size=1)
         self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
-        self.show_path_pub = rospy.Publisher('astar_plan', Path, queue_size=1)
 
     def __goal_pose_cbk(self, data):
         """! Callback to catch the goal pose.
@@ -102,11 +101,11 @@ class Navigation:
         #                                                                            end_yaw))
 
         # Convert pose to pixels
-        x_offset = 95
-        y_offset = 102
+        x_offset = 180
+        y_offset = 200
 
-        x_conv = -0.1
-        y_conv = 0.1
+        x_conv = -0.05
+        y_conv = 0.05
 
         start_pix_x = int(start_pose.pose.position.y / x_conv) + x_offset
         start_pix_y = int(start_pose.pose.position.x / y_conv) + y_offset
@@ -145,8 +144,8 @@ class Navigation:
 
             point_pose = PoseStamped()
             point_pose.header.frame_id = 'map'
-            point_pose.pose.position.x = (-1 * pose_x) - 0.7
-            point_pose.pose.position.y = (-1 * pose_y) - 0.7
+            point_pose.pose.position.x = (-1 * pose_x) - 1 # -0.7
+            point_pose.pose.position.y = (-1 * pose_y) - 1 # -0.7
 
             path.poses.append(point_pose)
 
@@ -158,7 +157,7 @@ class Navigation:
         path.header.frame_id = 'map'
 
         # publish path for Rviz to display on screen
-        self.show_path_pub.publish(path)
+        self.path_pub.publish(path)
 
         return path
 
@@ -186,7 +185,6 @@ class Navigation:
         # set next waypoint as target
         if idx + 1 < len(path.poses):
             idx = idx + 1
-        print("target waypoint:", idx)
 
         return idx
 
@@ -208,11 +206,7 @@ class Navigation:
         dy = wp_y - bot_y
 
         heading = np.arctan2(dy, dx)
-
-        if wp_dist < 0.05:
-            speed = 0
-        else:
-            speed = min(0.1, wp_dist)
+        speed = 0.1
 
         return speed, heading
 
@@ -224,7 +218,7 @@ class Navigation:
         """
         cmd_vel = Twist()
 
-        # calculate current turtle bot orientation(yaw0
+        # calculate current turtle bot orientation (yaw)
         bot_pose = self.ttbot_pose
 
         bot_quat = (bot_pose.pose.orientation.x, bot_pose.pose.orientation.y, bot_pose.pose.orientation.z,
@@ -233,9 +227,13 @@ class Navigation:
         bot_yaw = bot_euler[2]
 
         # calculate steering angle
-        steering_angle = 2 * (heading - bot_yaw)
+        steering_angle = heading - bot_yaw
 
-        cmd_vel.linear.x = speed
+        if steering_angle > 0.3:
+            cmd_vel.linear.x = 0
+        else:
+            cmd_vel.linear.x = speed
+
         cmd_vel.angular.z = steering_angle
 
         self.cmd_vel_pub.publish(cmd_vel)
@@ -251,6 +249,16 @@ class Navigation:
 
         self.cmd_vel_pub.publish(cmd_vel)
 
+    def calc_goal_yaw(self):
+        goal_quat = (self.goal_pose.pose.orientation.x,
+                     self.goal_pose.pose.orientation.y,
+                     self.goal_pose.pose.orientation.z,
+                     self.goal_pose.pose.orientation.w)
+        goal_euler = tf.transformations.euler_from_quaternion(goal_quat)
+        goal_yaw = goal_euler[2]
+
+        return goal_yaw
+
     def run(self):
         """! Main loop of the node. You need to wait until a new pose is published, create a path and then
         drive the vehicle towards the final pose.
@@ -265,6 +273,7 @@ class Navigation:
         goal_flag = self.goal_pose
         timeout = False
         path = None
+        idx_prev = 0
 
         while not rospy.is_shutdown():
             # 0. Localize robot initial position
@@ -284,6 +293,7 @@ class Navigation:
 
                 # Run A* path planning
                 path = self.a_star_path_planner(self.ttbot_pose, self.goal_pose)
+                idx_prev = 0
 
             # Reset goal_flag to current goal pose
             goal_flag = self.goal_pose
@@ -295,10 +305,23 @@ class Navigation:
 
             # Find next point to go towards and set current goal
             idx = self.get_path_idx(path, self.ttbot_pose)
+
+            if idx > idx_prev:
+                idx_prev = idx
+            else:
+                idx = idx_prev
+
             current_goal = path.poses[idx]
 
-            # Route to waypoint (speed and heading)
-            speed, heading = self.path_follower(self.ttbot_pose, current_goal)
+            # Checks for final waypoint
+            if (idx + 1) == len(path.poses):
+                print("reached final waypoint")
+                speed = 0
+                heading = self.calc_goal_yaw()
+            else:
+                print("target waypoint:", idx)
+                # Route to waypoint (speed and heading)
+                speed, heading = self.path_follower(self.ttbot_pose, current_goal)
 
             # move ttbot to waypoint
             self.move_ttbot(speed, heading)

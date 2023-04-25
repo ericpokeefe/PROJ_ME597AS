@@ -34,7 +34,7 @@ class Map():
         # Open the map image
         #map_name = map_df.image[0]
         im = Image.open(map_name + '.pgm')
-        size = 200, 200
+        size = 608, 384
         im.thumbnail(size)
         im = ImageOps.grayscale(im)
         # Get the limits of the map. This will help to display the map
