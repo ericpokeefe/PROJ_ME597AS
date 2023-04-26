@@ -541,6 +541,7 @@ class Navigation:
             rospy.loginfo("CvBridge Error")
 
         # print(self.cv_image.shape)
+        print(self.padded_image.shape)
         self.show_image(self.padded_image)
 
     '''
