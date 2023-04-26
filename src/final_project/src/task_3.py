@@ -384,6 +384,8 @@ class Navigation:
         self.hsv_mask = None
         self.blur = None
         self.contours = None
+        self.filtered_image = None
+        self.padded_image = None
 
         self.min_hue = 0
         self.max_hue = 255
@@ -452,19 +454,23 @@ class Navigation:
             self.hsv_mask = cv2.inRange(self.cv_hsv_image, (self.min_hue, self.min_sat, self.min_val),
                                         (self.max_hue, self.max_sat, self.max_val))
             self.blur = cv2.GaussianBlur(self.hsv_mask, (7, 7), 0)
+            # self.filtered_image = cv2.bitwise_not(self.blur)  # object is white on black background
+            self.padded_image = cv2.copyMakeBorder(self.blur, 200, 200, 200, 200, cv2.BORDER_CONSTANT,
+                                            value=(255, 255, 255))
+
 
             '''
-            
-            self.contours, _ = cv2.findContours(self.blur, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            self.contours, _ = cv2.findContours(self.padded_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
             # Draw a rectangle around the largest contour
             if len(self.contours) > 0:
                 c = max(self.contours, key=cv2.contourArea)
                 x, y, w, h = cv2.boundingRect(c)
-                cv2.rectangle(self.blur, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.rectangle(self.padded_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
             else:
                 print("no contours found")
             '''
+
 
             '''
             # Setup SimpleBlobDetector parameters.
@@ -504,13 +510,13 @@ class Navigation:
             params.filterByInertia = False
             params.filterByArea = True
             params.minArea = 500
-            params.maxArea = 1000000
+            params.maxArea = float('inf')
 
             # Create the blob detector
             detector = cv2.SimpleBlobDetector_create(params)
 
             # Detect the blobs in the binary mask
-            keypoints = detector.detect(self.blur)
+            keypoints = detector.detect(self.padded_image)
 
             # Iterate over the detected blobs and find the blob with the largest area
             max_blob = None
@@ -526,7 +532,7 @@ class Navigation:
                 cx = int(max_blob.pt[0])
                 cy = int(max_blob.pt[1])
                 r = int(max_blob.size / 2)
-                cv2.circle(self.blur, (cx, cy), r, (0, 0, 255), 2)
+                cv2.circle(self.padded_image, (cx, cy), 10, (255, 0, 0), 10)
                 print("cx: {:.2f}, cy: {:.2f}, r: {:.2f}".format(cx, cy, r))
             else:
                 print("Target object not found")
@@ -535,7 +541,7 @@ class Navigation:
             rospy.loginfo("CvBridge Error")
 
         # print(self.cv_image.shape)
-        self.show_image(self.blur)
+        self.show_image(self.padded_image)
 
     '''
     def get_hsv(self, x, index):
