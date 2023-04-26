@@ -402,13 +402,17 @@ class Navigation:
 
         self.obs_det = False
 
-        self.fov = 2  # (total fov / 2) - 1
         self.front_dist = 100
+        self.fleft_dist = 100
         self.left_dist = 100
+        self.bleft_dist = 100
         self.back_dist = 100
+        self.bright_dist = 100
         self.right_dist = 100
+        self.fright_dist = 100
         self.laser_range_min = 100
-        self.laser_range_min_index = None
+        self.laser_range_min_index = 0
+        self.laser_range_min_index_prev = 0
 
         '''
         cv2.namedWindow("Set Mask", cv2.WINDOW_NORMAL)
@@ -466,42 +470,34 @@ class Navigation:
         # self.laser_min = data.range_min
         # self.laser_max = data.range_max
         self.laser_ranges = data.ranges
+
         '''
-        rospy.loginfo('0: {:.4f}, 89: {:.4f}, 179: {:.4f}, 269; {:.4f}'.format(self.laser_ranges[0],
-                                                                               self.laser_ranges[89],
-                                                                               self.laser_ranges[179],
-                                                                               self.laser_ranges[269]))
+        self.front_dist = min(min(self.laser_ranges[0:22]), min(self.laser_ranges[337:359]))
+        self.fleft_dist = min(self.laser_ranges[23:66])
+        self.left_dist = min(self.laser_ranges[67:112])
+        self.bleft_dist = min(self.laser_ranges[113:156])
+        self.back_dist = min(self.laser_ranges[157:202])
+        self.bright_dist = min(self.laser_ranges[203:246])
+        self.right_dist = min(self.laser_ranges[247:292])
+        self.fright_dist = min(self.laser_ranges[293:336])
         '''
 
-        # find front, left, back, right distances
-        # self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)], self.laser_ranges[(359 - (self.fov - 1)):359]))
-
-        # use if fov = 1
-        self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)]), min(self.laser_ranges[358:359]))
-        self.left_dist = min(self.laser_ranges[(89 - self.fov):(89 + self.fov)])
-        self.back_dist = min(self.laser_ranges[(179 - self.fov):(179 + self.fov)])
-        self.right_dist = min(self.laser_ranges[(269 - self.fov):(269 + self.fov)])
-
-        # self.front_dist = self.laser_ranges[0]
-        # self.left_dist = self.laser_ranges[89]
-        # self.back_dist = self.laser_ranges[179]
-        # self.right_dist = self.laser_ranges[269]
-
+        '''
         rospy.loginfo('front: {:.2f}, left: {:.2f}, back: {:.2f}, right: {:.2f}'.format(self.front_dist,
                                                                                         self.left_dist,
                                                                                         self.back_dist,
                                                                                         self.right_dist))
+        '''
 
         # find minimum distance and corresponding index
-        self.laser_range_min = 100
-        self.laser_range_min_index = None
+        self.laser_range_min_index_prev = self.laser_range_min_index
 
         for (i, item) in enumerate(self.laser_ranges):
             if item < self.laser_range_min:
                 self.laser_range_min = item
                 self.laser_range_min_index = i
 
-        rospy.loginfo('range_min = {:.4f}, min_index: {:d}'.format(self.laser_range_min, self.laser_range_min_index))
+        #rospy.loginfo('range_min = {:.4f}, min_index: {:d}'.format(self.laser_range_min, self.laser_range_min_index))
 
     def __image_callback(self, image_msg):
         # rospy.loginfo(image_msg.header)
@@ -803,7 +799,22 @@ class Navigation:
 
         return goal_yaw
 
+    # TODO OBSTACLE DETECT FUNCTION
     def obstacle_detect(self):
+        # checks if object is approaching from left or right
+        '''
+        if (self.laser_range_min_index < 66) and (self.laser_range_min_index < self.laser_range_min_index_prev):
+            print("approaching from left and moving right")
+        elif (self.laser_range_min_index > 293) and (self.laser_range_min_index > self.laser_range_min_index_prev):
+            print("approaching from right and moving left")
+        '''
+
+        '''
+        if (((self.laser_range_min_index > 0) and (self.laser_range_min_index < 22)) or
+                ((self.laser_range_min_index > 337) and (self.laser_range_min_index < 359))):
+            self.min_laser_pos = 0
+        '''
+
         if self.r is not None:
             self.obs_det = True
         else:
@@ -828,6 +839,7 @@ class Navigation:
 
         while not rospy.is_shutdown():
             # 0. Localize robot initial position
+            '''
             if self.cov_check == False:
                 # spin turtlebot to find initial pose
                 print('cov_check failed')
@@ -849,10 +861,12 @@ class Navigation:
             # Reset goal_flag to current goal pose
             goal_flag = self.goal_pose
 
+            
             # if no path is returned, stop moving
             if path is None:
                 self.move_ttbot(0, 0)
                 continue
+            
 
             # Find next point to go towards and set current goal
             idx = self.get_path_idx(path, self.ttbot_pose)
@@ -863,14 +877,17 @@ class Navigation:
                 idx = idx_prev
 
             current_goal = path.poses[idx]
+            '''
 
-            # TODO add obstacle detect here
+            # TODO OBSTACLE DETECTION
             self.obstacle_detect()  # True or False
 
             if self.obs_det == True:
                 print("obstacle detected")
-                self.spin_ttbot(0)
-            else:
+                # self.spin_ttbot(0)
+
+            '''
+            if True:
                 # Drives turtlebot along path. checks for final waypoint
                 if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
                     print("reached goal pose")
@@ -887,6 +904,7 @@ class Navigation:
 
                 # move ttbot to waypoint
                 self.move_ttbot(speed, heading)
+            '''
 
             self.rate.sleep()
         rospy.signal_shutdown("[{}] Finished Cleanly".format(self.name))
