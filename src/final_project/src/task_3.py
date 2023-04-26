@@ -5,6 +5,7 @@ import os
 import numpy as np
 import math
 import yaml
+import rospkg
 
 import time
 
@@ -354,18 +355,22 @@ class Navigation:
         # ROS related variables
         self.node_name = node_name
         self.rate = 0
+        self.pkgpath = None
 
         # Path planner/follower related variables
         self.path = Path()
         self.goal_pose = PoseStamped()
         self.ttbot_pose = PoseStamped()
+        self.wp_dist = None
 
         # Covarance check
         self.cov_check = False
 
         # From Jupyter Notebook
-        self.mp = MapProcessor('/home/ericokeefe/PycharmProjects/PROJ_ME597AS/src/final_project/maps/map')
-        self.mp.inflate_map(self.mp.rect_kernel(10, 1))
+        rospack = rospkg.RosPack()
+        self.pkgpath = rospack.get_path("final_project")
+        self.mp = MapProcessor(self.pkgpath + '/maps/map')
+        self.mp.inflate_map(self.mp.rect_kernel(12, 1))
         self.mp.get_graph_from_map()
 
     def init_app(self):
@@ -467,8 +472,8 @@ class Navigation:
 
             point_pose = PoseStamped()
             point_pose.header.frame_id = 'map'
-            point_pose.pose.position.x = (-1 * pose_x) - 1 # -0.7
-            point_pose.pose.position.y = (-1 * pose_y) - 1 # -0.7
+            point_pose.pose.position.x = (-1 * pose_x) - 1
+            point_pose.pose.position.y = (-1 * pose_y) - 1
 
             path.poses.append(point_pose)
 
@@ -506,7 +511,11 @@ class Navigation:
                 idx = i
 
         # set next waypoint as target
-        if idx + 1 < len(path.poses):
+        if idx + 5 < len(path.poses):
+            idx = idx + 5
+        elif idx + 3 < len(path.poses):
+            idx = idx + 3
+        elif idx + 1 < len(path.poses):
             idx = idx + 1
 
         return idx
@@ -523,13 +532,13 @@ class Navigation:
         bot_x = vehicle_pose.pose.position.x
         bot_y = vehicle_pose.pose.position.y
 
-        wp_dist = np.sqrt((wp_x - bot_x) ** 2 + (wp_y - bot_y) ** 2)
+        self.wp_dist = np.sqrt((wp_x - bot_x) ** 2 + (wp_y - bot_y) ** 2)
 
         dx = wp_x - bot_x
         dy = wp_y - bot_y
 
         heading = np.arctan2(dy, dx)
-        speed = 0.1
+        speed = min(0.2, (2 * self.wp_dist))
 
         return speed, heading
 
@@ -552,11 +561,10 @@ class Navigation:
         # calculate steering angle
         steering_angle = heading - bot_yaw
 
-        if steering_angle > 0.3:
-            cmd_vel.linear.x = 0
-        else:
-            cmd_vel.linear.x = speed
+        if abs(steering_angle) > 0.3:
+            speed = -0.05
 
+        cmd_vel.linear.x = speed
         cmd_vel.angular.z = steering_angle
 
         self.cmd_vel_pub.publish(cmd_vel)
@@ -602,7 +610,7 @@ class Navigation:
             # 0. Localize robot initial position
             if self.cov_check == False:
                 # spin turtlebot to find initial pose
-                print('cov_check failed\n\n')
+                print('cov_check failed')
                 self.spin_ttbot(0.5)
                 continue
 
@@ -637,10 +645,15 @@ class Navigation:
             current_goal = path.poses[idx]
 
             # Checks for final waypoint
-            if (idx + 1) == len(path.poses):
-                print("reached final waypoint")
+
+            if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
+                print("reached goal pose")
                 speed = 0
                 heading = self.calc_goal_yaw()
+            elif (idx + 5) > len(path.poses):
+                print("approaching goal pose")
+                speed, heading = self.path_follower(self.ttbot_pose, current_goal)
+                speed = 0.5 * speed
             else:
                 print("target waypoint:", idx)
                 # Route to waypoint (speed and heading)
