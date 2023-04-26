@@ -398,7 +398,11 @@ class Navigation:
 
         self.cx = None
         self.cy = None
+        self.cx_prev = None
+        self.cy_prev = None
         self.r = None
+        self.r_prev = None
+        self.cx_flag = 0
 
         self.obs_det = False
 
@@ -580,6 +584,10 @@ class Navigation:
                 if area > max_area:
                     max_area = area
                     max_blob = blob
+
+            self.cx_prev = self.cx
+            self.cy_prev = self.cy
+            self.r_prev = self.r
 
             # Compute the centroid of the target object
             if max_blob is not None:
@@ -815,10 +823,34 @@ class Navigation:
             self.min_laser_pos = 0
         '''
 
-        if self.r is not None:
+        print(self.cx)
+        if (self.r is not None) and (self.r_prev is not None):
             self.obs_det = True
+            if (self.cx > self.cx_prev) and (self.cx < 1160):
+                self.cx_flag = 1
+            elif (self.cx > self.cx_prev) and (self.cx >= 1160):
+                self.cx_flag = 2
+            elif (self.cx < self.cx_prev) and (self.cx > 1160):
+                self.cx_flag = 3
+            elif (self.cx < self.cx_prev) and (self.cx <= 1160):
+                self.cx_flag = 4
         else:
             self.obs_det = False
+            self.cx_flag = 0
+
+        if self.cx_flag == 0:
+            print("no obstacle")
+        elif self.cx_flag == 1:
+            print("object approaching and moving right")
+        elif self.cx_flag == 2:
+            print("object departing and moving right")
+        elif self.cx_flag == 3:
+            print("object approaching and moving left")
+        elif self.cx_flag == 4:
+            print("object departing and moving left")
+
+
+
 
     def run(self):
         """! Main loop of the node. You need to wait until a new pose is published, create a path and then
@@ -882,9 +914,10 @@ class Navigation:
             # TODO OBSTACLE DETECTION
             self.obstacle_detect()  # True or False
 
+            '''
             if self.obs_det == True:
-                print("obstacle detected")
-                # self.spin_ttbot(0)
+                self.spin_ttbot(0)
+            '''
 
             '''
             if True:
