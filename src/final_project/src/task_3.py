@@ -25,6 +25,9 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Pose, Twist
 
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import Image as cvImage
 
 class Map():
     def __init__(self, map_name):
@@ -373,6 +376,11 @@ class Navigation:
         self.mp.inflate_map(self.mp.rect_kernel(12, 1))
         self.mp.get_graph_from_map()
 
+        # OpenCV Initializations
+        self.bridge = CvBridge()
+        cv2.namedWindow("Image Window", 1)
+        self.cv_image = None
+
     def init_app(self):
         """! Node intialization.
         @param  None
@@ -385,6 +393,7 @@ class Navigation:
         # Subscribers
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.__goal_pose_cbk, queue_size=1)
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.__ttbot_pose_cbk, queue_size=1)
+        rospy.Subscriber("/camera/rgb/image_raw", cvImage, self.image_callback)
 
         # Publishers
         self.path_pub = rospy.Publisher('global_plan', Path, queue_size=1)
@@ -412,6 +421,21 @@ class Navigation:
             if abs(i) > 0.05:
                 self.cov_check = False
                 break
+
+    def image_callback(self, image_msg):
+        # rospy.loginfo(image_msg.header)
+
+        try:
+            self.cv_image = self.bridge.imgmsg_to_cv2(image_msg, "passthrough")
+        except CvBridgeError:
+            rospy.loginfo("CvBridge Error")
+
+        print(self.cv_image.shape)
+        self.show_image(self.cv_image)
+
+    def show_image(self, image):
+        cv2.imshow("Image Window", image)
+        cv2.waitKey(3)
 
     def a_star_path_planner(self, start_pose, end_pose):
         """! A Star path planner.
@@ -600,6 +624,7 @@ class Navigation:
         '''
             Main loop
         '''
+
         path_complete = False
         goal_flag = self.goal_pose
         timeout = False
@@ -608,6 +633,7 @@ class Navigation:
 
         while not rospy.is_shutdown():
             # 0. Localize robot initial position
+            '''
             if self.cov_check == False:
                 # spin turtlebot to find initial pose
                 print('cov_check failed')
@@ -661,10 +687,10 @@ class Navigation:
 
             # move ttbot to waypoint
             self.move_ttbot(speed, heading)
+            '''
 
             self.rate.sleep()
         rospy.signal_shutdown("[{}] Finished Cleanly".format(self.name))
-
 
 if __name__ == "__main__":
     nav = Navigation(node_name='Navigation')
