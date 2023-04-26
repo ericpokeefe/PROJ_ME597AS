@@ -5,6 +5,7 @@ import os
 import numpy as np
 import math
 import yaml
+import rospkg
 
 import time
 
@@ -354,6 +355,7 @@ class Navigation:
         # ROS related variables
         self.node_name = node_name
         self.rate = 0
+        self.pkgpath = None
 
         # Path planner/follower related variables
         self.path = Path()
@@ -364,8 +366,10 @@ class Navigation:
         self.cov_check = False
 
         # From Jupyter Notebook
-        self.mp = MapProcessor('/home/ericokeefe/PycharmProjects/PROJ_ME597AS/src/final_project/maps/map')
-        self.mp.inflate_map(self.mp.rect_kernel(10, 1))
+        rospack = rospkg.RosPack()
+        self.pkgpath = rospack.get_path("final_project")
+        self.mp = MapProcessor(self.pkgpath + '/maps/map')
+        self.mp.inflate_map(self.mp.rect_kernel(12, 1))
         self.mp.get_graph_from_map()
 
     def init_app(self):
@@ -602,7 +606,7 @@ class Navigation:
             # 0. Localize robot initial position
             if self.cov_check == False:
                 # spin turtlebot to find initial pose
-                print('cov_check failed\n\n')
+                print('cov_check failed')
                 self.spin_ttbot(0.5)
                 continue
 
