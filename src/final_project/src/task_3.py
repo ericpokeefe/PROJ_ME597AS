@@ -380,7 +380,7 @@ class Navigation:
 
         # OpenCV Initializations
         self.bridge = CvBridge()
-        cv2.namedWindow("Image Window", 1)
+        #cv2.namedWindow("Image Window", 1)
         self.cv_image = None
         self.cv_hsv_image = None
         self.hsv_mask = None
@@ -405,6 +405,7 @@ class Navigation:
         self.cx_flag = 0
 
         self.obs_det = False
+        self.obs_stop = False
 
         self.front_dist = 100
         self.fleft_dist = 100
@@ -417,6 +418,10 @@ class Navigation:
         self.laser_range_min = 100
         self.laser_range_min_index = 0
         self.laser_range_min_index_prev = 0
+        self.local_dist_min = 100
+        self.local_dist_min_index = 0
+
+        self.local_dist = [0, 0, 0, 0, 0, 0, 0, 0]
 
         '''
         cv2.namedWindow("Set Mask", cv2.WINDOW_NORMAL)
@@ -475,16 +480,21 @@ class Navigation:
         # self.laser_max = data.range_max
         self.laser_ranges = data.ranges
 
-        '''
-        self.front_dist = min(min(self.laser_ranges[0:22]), min(self.laser_ranges[337:359]))
-        self.fleft_dist = min(self.laser_ranges[23:66])
-        self.left_dist = min(self.laser_ranges[67:112])
-        self.bleft_dist = min(self.laser_ranges[113:156])
-        self.back_dist = min(self.laser_ranges[157:202])
-        self.bright_dist = min(self.laser_ranges[203:246])
-        self.right_dist = min(self.laser_ranges[247:292])
-        self.fright_dist = min(self.laser_ranges[293:336])
-        '''
+        self.local_dist[0] = min(min(self.laser_ranges[0:22]), min(self.laser_ranges[337:359]))
+        self.local_dist[1] = min(self.laser_ranges[23:66])
+        self.local_dist[2] = min(self.laser_ranges[67:112])
+        self.local_dist[3] = min(self.laser_ranges[113:156])
+        self.local_dist[4] = min(self.laser_ranges[157:202])
+        self.local_dist[5] = min(self.laser_ranges[203:246])
+        self.local_dist[6] = min(self.laser_ranges[247:292])
+        self.local_dist[7] = min(self.laser_ranges[293:336])
+
+        for (i, item) in enumerate(self.local_dist):
+            if item < self.local_dist_min:
+                self.local_dist_min = item
+                self.local_dist_min_index = i
+
+
 
         '''
         rospy.loginfo('front: {:.2f}, left: {:.2f}, back: {:.2f}, right: {:.2f}'.format(self.front_dist,
@@ -501,7 +511,8 @@ class Navigation:
                 self.laser_range_min = item
                 self.laser_range_min_index = i
 
-        #rospy.loginfo('range_min = {:.4f}, min_index: {:d}'.format(self.laser_range_min, self.laser_range_min_index))
+        rospy.loginfo('local_dist_min = {:.4f}, local_dist_min_index: {:d}'.format(self.local_dist_min,
+                                                                                   self.local_dist_min_index))
 
     def __image_callback(self, image_msg):
         # rospy.loginfo(image_msg.header)
@@ -607,7 +618,7 @@ class Navigation:
 
         # print(self.cv_image.shape)
         # print(self.padded_image.shape)
-        self.show_image(self.padded_image)
+        #self.show_image(self.padded_image)
 
     '''
     def get_hsv(self, x, index):
@@ -823,7 +834,7 @@ class Navigation:
             self.min_laser_pos = 0
         '''
 
-        print(self.cx)
+        #print(self.cx)
         if (self.r is not None) and (self.r_prev is not None):
             self.obs_det = True
             if (self.cx > self.cx_prev) and (self.cx < 1160):
@@ -839,17 +850,26 @@ class Navigation:
             self.cx_flag = 0
 
         if self.cx_flag == 0:
-            print("no obstacle")
+            pass
+            #print("no obstacle")
         elif self.cx_flag == 1:
-            print("object approaching and moving right")
+            pass
+            #print("object approaching and moving right")
         elif self.cx_flag == 2:
-            print("object departing and moving right")
+            pass
+            #print("object departing and moving right")
         elif self.cx_flag == 3:
-            print("object approaching and moving left")
+            pass
+            #print("object approaching and moving left")
         elif self.cx_flag == 4:
-            print("object departing and moving left")
+            pass
+            #print("object departing and moving left")
 
-
+        if ((self.cx_flag == 1) or (self.cx_flag == 3)) and (self.r > 400):
+            print("stop moving")
+            self.obs_stop = True
+        else:
+            self.obs_stop = False
 
 
     def run(self):
@@ -871,7 +891,7 @@ class Navigation:
 
         while not rospy.is_shutdown():
             # 0. Localize robot initial position
-            '''
+
             if self.cov_check == False:
                 # spin turtlebot to find initial pose
                 print('cov_check failed')
@@ -909,35 +929,30 @@ class Navigation:
                 idx = idx_prev
 
             current_goal = path.poses[idx]
-            '''
 
             # TODO OBSTACLE DETECTION
             self.obstacle_detect()  # True or False
 
-            '''
-            if self.obs_det == True:
+            if self.obs_stop == True:
                 self.spin_ttbot(0)
-            '''
+                continue
 
-            '''
-            if True:
-                # Drives turtlebot along path. checks for final waypoint
-                if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
-                    print("reached goal pose")
-                    speed = 0
-                    heading = self.calc_goal_yaw()
-                elif (idx + 5) > len(path.poses):
-                    print("approaching goal pose")
-                    speed, heading = self.path_follower(self.ttbot_pose, current_goal)
-                    speed = 0.5 * speed
-                else:
-                    print("target waypoint:", idx)
-                    # Route to waypoint (speed and heading)
-                    speed, heading = self.path_follower(self.ttbot_pose, current_goal)
+            # Drives turtlebot along path. checks for final waypoint
+            if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
+                print("reached goal pose")
+                speed = 0
+                heading = self.calc_goal_yaw()
+            elif (idx + 5) > len(path.poses):
+                print("approaching goal pose")
+                speed, heading = self.path_follower(self.ttbot_pose, current_goal)
+                speed = 0.5 * speed
+            else:
+                print("target waypoint:", idx)
+                # Route to waypoint (speed and heading)
+                speed, heading = self.path_follower(self.ttbot_pose, current_goal)
 
-                # move ttbot to waypoint
-                self.move_ttbot(speed, heading)
-            '''
+            # move ttbot to waypoint
+            self.move_ttbot(speed, heading)
 
             self.rate.sleep()
         rospy.signal_shutdown("[{}] Finished Cleanly".format(self.name))
