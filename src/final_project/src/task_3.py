@@ -29,6 +29,8 @@ import cv2
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image as cvImage
 
+from sensor_msgs.msg import LaserScan
+
 class Map():
     def __init__(self, map_name):
         self.map_im, self.map_df, self.limits = self.__open_map(map_name)
@@ -394,6 +396,20 @@ class Navigation:
         self.min_val = 10
         self.max_val = 255
 
+        self.cx = None
+        self.cy = None
+        self.r = None
+
+        self.obs_det = False
+
+        self.fov = 2  # (total fov / 2) - 1
+        self.front_dist = 100
+        self.left_dist = 100
+        self.back_dist = 100
+        self.right_dist = 100
+        self.laser_range_min = 100
+        self.laser_range_min_index = None
+
         '''
         cv2.namedWindow("Set Mask", cv2.WINDOW_NORMAL)
         cv2.createTrackbar("Min Hue", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 0))
@@ -416,7 +432,8 @@ class Navigation:
         # Subscribers
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.__goal_pose_cbk, queue_size=1)
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.__ttbot_pose_cbk, queue_size=1)
-        rospy.Subscriber("/camera/rgb/image_raw", cvImage, self.image_callback)
+        rospy.Subscriber("/camera/rgb/image_raw", cvImage, self.__image_callback)
+        rospy.Subscriber('/scan', LaserScan, self.__laser_scan_cbk, queue_size=1)
 
         # Publishers
         self.path_pub = rospy.Publisher('global_plan', Path, queue_size=1)
@@ -445,7 +462,48 @@ class Navigation:
                 self.cov_check = False
                 break
 
-    def image_callback(self, image_msg):
+    def __laser_scan_cbk(self, data):
+        # self.laser_min = data.range_min
+        # self.laser_max = data.range_max
+        self.laser_ranges = data.ranges
+        '''
+        rospy.loginfo('0: {:.4f}, 89: {:.4f}, 179: {:.4f}, 269; {:.4f}'.format(self.laser_ranges[0],
+                                                                               self.laser_ranges[89],
+                                                                               self.laser_ranges[179],
+                                                                               self.laser_ranges[269]))
+        '''
+
+        # find front, left, back, right distances
+        # self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)], self.laser_ranges[(359 - (self.fov - 1)):359]))
+
+        # use if fov = 1
+        self.front_dist = min(min(self.laser_ranges[0:(0 + self.fov)]), min(self.laser_ranges[358:359]))
+        self.left_dist = min(self.laser_ranges[(89 - self.fov):(89 + self.fov)])
+        self.back_dist = min(self.laser_ranges[(179 - self.fov):(179 + self.fov)])
+        self.right_dist = min(self.laser_ranges[(269 - self.fov):(269 + self.fov)])
+
+        # self.front_dist = self.laser_ranges[0]
+        # self.left_dist = self.laser_ranges[89]
+        # self.back_dist = self.laser_ranges[179]
+        # self.right_dist = self.laser_ranges[269]
+
+        rospy.loginfo('front: {:.2f}, left: {:.2f}, back: {:.2f}, right: {:.2f}'.format(self.front_dist,
+                                                                                        self.left_dist,
+                                                                                        self.back_dist,
+                                                                                        self.right_dist))
+
+        # find minimum distance and corresponding index
+        self.laser_range_min = 100
+        self.laser_range_min_index = None
+
+        for (i, item) in enumerate(self.laser_ranges):
+            if item < self.laser_range_min:
+                self.laser_range_min = item
+                self.laser_range_min_index = i
+
+        rospy.loginfo('range_min = {:.4f}, min_index: {:d}'.format(self.laser_range_min, self.laser_range_min_index))
+
+    def __image_callback(self, image_msg):
         # rospy.loginfo(image_msg.header)
 
         try:
@@ -529,19 +587,22 @@ class Navigation:
 
             # Compute the centroid of the target object
             if max_blob is not None:
-                cx = int(max_blob.pt[0])
-                cy = int(max_blob.pt[1])
-                r = int(max_blob.size / 2)
-                cv2.circle(self.padded_image, (cx, cy), 10, (255, 0, 0), 10)
-                print("cx: {:.2f}, cy: {:.2f}, r: {:.2f}".format(cx, cy, r))
+                self.cx = int(max_blob.pt[0])
+                self.cy = int(max_blob.pt[1])
+                self.r = int(max_blob.size / 2)
+                cv2.circle(self.padded_image, (self.cx, self.cy), 10, (255, 0, 0), 10)
+                print("cx: {:.2f}, cy: {:.2f}, r: {:.2f}".format(self.cx, self.cy, self.r))
             else:
-                print("Target object not found")
+                self.cx = None
+                self.cy = None
+                self.r = None
+                #print("Target object not found")
 
         except CvBridgeError:
             rospy.loginfo("CvBridge Error")
 
         # print(self.cv_image.shape)
-        print(self.padded_image.shape)
+        # print(self.padded_image.shape)
         self.show_image(self.padded_image)
 
     '''
@@ -742,6 +803,12 @@ class Navigation:
 
         return goal_yaw
 
+    def obstacle_detect(self):
+        if self.r is not None:
+            self.obs_det = True
+        else:
+            self.obs_det = False
+
     def run(self):
         """! Main loop of the node. You need to wait until a new pose is published, create a path and then
         drive the vehicle towards the final pose.
@@ -761,7 +828,6 @@ class Navigation:
 
         while not rospy.is_shutdown():
             # 0. Localize robot initial position
-            '''
             if self.cov_check == False:
                 # spin turtlebot to find initial pose
                 print('cov_check failed')
@@ -798,24 +864,29 @@ class Navigation:
 
             current_goal = path.poses[idx]
 
-            # Checks for final waypoint
+            # TODO add obstacle detect here
+            self.obstacle_detect()  # True or False
 
-            if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
-                print("reached goal pose")
-                speed = 0
-                heading = self.calc_goal_yaw()
-            elif (idx + 5) > len(path.poses):
-                print("approaching goal pose")
-                speed, heading = self.path_follower(self.ttbot_pose, current_goal)
-                speed = 0.5 * speed
+            if self.obs_det == True:
+                print("obstacle detected")
+                self.spin_ttbot(0)
             else:
-                print("target waypoint:", idx)
-                # Route to waypoint (speed and heading)
-                speed, heading = self.path_follower(self.ttbot_pose, current_goal)
+                # Drives turtlebot along path. checks for final waypoint
+                if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
+                    print("reached goal pose")
+                    speed = 0
+                    heading = self.calc_goal_yaw()
+                elif (idx + 5) > len(path.poses):
+                    print("approaching goal pose")
+                    speed, heading = self.path_follower(self.ttbot_pose, current_goal)
+                    speed = 0.5 * speed
+                else:
+                    print("target waypoint:", idx)
+                    # Route to waypoint (speed and heading)
+                    speed, heading = self.path_follower(self.ttbot_pose, current_goal)
 
-            # move ttbot to waypoint
-            self.move_ttbot(speed, heading)
-            '''
+                # move ttbot to waypoint
+                self.move_ttbot(speed, heading)
 
             self.rate.sleep()
         rospy.signal_shutdown("[{}] Finished Cleanly".format(self.name))
