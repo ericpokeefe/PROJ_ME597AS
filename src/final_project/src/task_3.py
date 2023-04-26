@@ -452,13 +452,84 @@ class Navigation:
             self.hsv_mask = cv2.inRange(self.cv_hsv_image, (self.min_hue, self.min_sat, self.min_val),
                                         (self.max_hue, self.max_sat, self.max_val))
             self.blur = cv2.GaussianBlur(self.hsv_mask, (7, 7), 0)
-            self.contours, _ = cv2.findContours(self.blur, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            '''
+            
+            self.contours, _ = cv2.findContours(self.blur, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
             # Draw a rectangle around the largest contour
             if len(self.contours) > 0:
                 c = max(self.contours, key=cv2.contourArea)
                 x, y, w, h = cv2.boundingRect(c)
                 cv2.rectangle(self.blur, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            else:
+                print("no contours found")
+            '''
+
+            '''
+            # Setup SimpleBlobDetector parameters.
+            params = cv2.SimpleBlobDetector_Params()
+
+            # Change thresholds
+            params.minThreshold = 10
+            params.maxThreshold = 200
+
+            # Filter by Area
+            params.filterByArea = False
+            params.minArea = 100
+
+            # Filter by Circularity
+            params.filterByCircularity = True
+            params.minCircularity = 0.1
+
+            # Filter by Convexity
+            params.filterByConvexity = True
+            params.minConvexity = 0.87
+
+            # Filter by Inertia
+            params.filterByInertia = True
+            params.minInertiaRatio = 0.01
+
+            # Simple Blob Detector
+            detector = cv2.SimpleBlobDetector_create(params)
+            keypoints = detector.detect(self.blur)
+            im_with_keypoints = cv2.drawKeypoints(self.blur, keypoints, np.array([]), (0, 0, 255),
+                                                  cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+            '''
+
+            # Set up the parameters for blob detection
+            params = cv2.SimpleBlobDetector_Params()
+            params.filterByCircularity = False
+            params.filterByConvexity = False
+            params.filterByInertia = False
+            params.filterByArea = True
+            params.minArea = 500
+            params.maxArea = 1000000
+
+            # Create the blob detector
+            detector = cv2.SimpleBlobDetector_create(params)
+
+            # Detect the blobs in the binary mask
+            keypoints = detector.detect(self.blur)
+
+            # Iterate over the detected blobs and find the blob with the largest area
+            max_blob = None
+            max_area = -1
+            for blob in keypoints:
+                area = blob.size
+                if area > max_area:
+                    max_area = area
+                    max_blob = blob
+
+            # Compute the centroid of the target object
+            if max_blob is not None:
+                cx = int(max_blob.pt[0])
+                cy = int(max_blob.pt[1])
+                r = int(max_blob.size / 2)
+                cv2.circle(self.blur, (cx, cy), r, (0, 0, 255), 2)
+                print("cx: {:.2f}, cy: {:.2f}, r: {:.2f}".format(cx, cy, r))
+            else:
+                print("Target object not found")
 
         except CvBridgeError:
             rospy.loginfo("CvBridge Error")
