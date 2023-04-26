@@ -380,6 +380,27 @@ class Navigation:
         self.bridge = CvBridge()
         cv2.namedWindow("Image Window", 1)
         self.cv_image = None
+        self.cv_hsv_image = None
+        self.hsv_mask = None
+        self.blur = None
+        self.contours = None
+
+        self.min_hue = 0
+        self.max_hue = 255
+        self.min_sat = 0
+        self.max_sat = 230
+        self.min_val = 10
+        self.max_val = 255
+
+        '''
+        cv2.namedWindow("Set Mask", cv2.WINDOW_NORMAL)
+        cv2.createTrackbar("Min Hue", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 0))
+        cv2.createTrackbar("Max Hue", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 1))
+        cv2.createTrackbar("Min Sat", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 2))
+        cv2.createTrackbar("Max Sat", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 3))
+        cv2.createTrackbar("Min Val", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 4))
+        cv2.createTrackbar("Max Val", "Set Mask", 0, 255, lambda x: self.get_hsv(x, 5))
+        '''
 
     def init_app(self):
         """! Node intialization.
@@ -427,11 +448,40 @@ class Navigation:
 
         try:
             self.cv_image = self.bridge.imgmsg_to_cv2(image_msg, "passthrough")
+            self.cv_hsv_image = cv2.cvtColor(self.cv_image, cv2.COLOR_BGR2HSV)
+            self.hsv_mask = cv2.inRange(self.cv_hsv_image, (self.min_hue, self.min_sat, self.min_val),
+                                        (self.max_hue, self.max_sat, self.max_val))
+            self.blur = cv2.GaussianBlur(self.hsv_mask, (7, 7), 0)
+            self.contours, _ = cv2.findContours(self.blur, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            # Draw a rectangle around the largest contour
+            if len(self.contours) > 0:
+                c = max(self.contours, key=cv2.contourArea)
+                x, y, w, h = cv2.boundingRect(c)
+                cv2.rectangle(self.blur, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
         except CvBridgeError:
             rospy.loginfo("CvBridge Error")
 
-        print(self.cv_image.shape)
-        self.show_image(self.cv_image)
+        # print(self.cv_image.shape)
+        self.show_image(self.blur)
+
+    '''
+    def get_hsv(self, x, index):
+        if index == 0:
+            self.min_hue = x
+        elif index == 1:
+            self.max_hue = x
+        elif index == 2:
+            self.min_sat = x
+        elif index == 3:
+            self.max_sat = x
+        elif index == 4:
+            self.min_val = x
+        elif index == 5:
+            self.max_val = x
+
+    '''
 
     def show_image(self, image):
         cv2.imshow("Image Window", image)
