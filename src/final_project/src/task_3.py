@@ -511,8 +511,8 @@ class Navigation:
                 self.laser_range_min = item
                 self.laser_range_min_index = i
 
-        rospy.loginfo('local_dist_min = {:.4f}, local_dist_min_index: {:d}'.format(self.local_dist_min,
-                                                                                   self.local_dist_min_index))
+        #rospy.loginfo('local_dist_min = {:.4f}, local_dist_min_index: {:d}'.format(self.local_dist_min,
+         #                                                                          self.local_dist_min_index))
 
     def __image_callback(self, image_msg):
         # rospy.loginfo(image_msg.header)
@@ -818,7 +818,6 @@ class Navigation:
 
         return goal_yaw
 
-    # TODO OBSTACLE DETECT FUNCTION
     def obstacle_detect(self):
         # checks if object is approaching from left or right
         '''
@@ -849,27 +848,26 @@ class Navigation:
             self.obs_det = False
             self.cx_flag = 0
 
-        if self.cx_flag == 0:
-            pass
-            #print("no obstacle")
-        elif self.cx_flag == 1:
-            pass
-            #print("object approaching and moving right")
-        elif self.cx_flag == 2:
-            pass
-            #print("object departing and moving right")
-        elif self.cx_flag == 3:
-            pass
-            #print("object approaching and moving left")
-        elif self.cx_flag == 4:
-            pass
-            #print("object departing and moving left")
+        if self.cx_flag is not 0:
+            if ((self.cx_flag == 1) or (self.cx_flag == 3)) and (self.r > 400):
+                print("stop moving")
+                self.obs_stop = True
+            elif (self.cx_flag == 2) and (self.r > self.r_prev) and (self.r > 200):
+                print("stop moving")
+                self.obs_stop = True
+            else:
+                self.obs_stop = False
 
-        if ((self.cx_flag == 1) or (self.cx_flag == 3)) and (self.r > 400):
-            print("stop moving")
-            self.obs_stop = True
-        else:
-            self.obs_stop = False
+        if self.cx_flag == 0:
+            print("no obstacle")
+        elif self.cx_flag == 1:
+            print("object approaching and moving right")
+        elif self.cx_flag == 2:
+            print("object departing and moving right")
+        elif self.cx_flag == 3:
+            print("object approaching and moving left")
+        elif self.cx_flag == 4:
+            print("object departing and moving left")
 
 
     def run(self):
