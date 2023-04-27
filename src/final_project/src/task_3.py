@@ -494,6 +494,15 @@ class Navigation:
                 self.local_dist_min = item
                 self.local_dist_min_index = i
 
+
+
+        '''
+        rospy.loginfo('front: {:.2f}, left: {:.2f}, back: {:.2f}, right: {:.2f}'.format(self.front_dist,
+                                                                                        self.left_dist,
+                                                                                        self.back_dist,
+                                                                                        self.right_dist))
+        '''
+
         # find minimum distance and corresponding index
         self.laser_range_min_index_prev = self.laser_range_min_index
 
@@ -730,8 +739,8 @@ class Navigation:
                 idx = i
 
         # set next waypoint as target
-        if idx + 7 < len(path.poses):
-            idx = idx + 7
+        if idx + 5 < len(path.poses):
+            idx = idx + 5
         elif idx + 3 < len(path.poses):
             idx = idx + 3
         elif idx + 1 < len(path.poses):
@@ -757,7 +766,7 @@ class Navigation:
         dy = wp_y - bot_y
 
         heading = np.arctan2(dy, dx)
-        speed = min(0.3, (3 * self.wp_dist))
+        speed = min(0.2, (2 * self.wp_dist))
 
         return speed, heading
 
@@ -929,14 +938,14 @@ class Navigation:
                 continue
 
             # Drives turtlebot along path. checks for final waypoint
-            if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.1):
+            if((idx + 1) == len(path.poses)) and (self.wp_dist < 0.05):
                 print("reached goal pose")
                 speed = 0
                 heading = self.calc_goal_yaw()
             elif (idx + 5) > len(path.poses):
                 print("approaching goal pose")
                 speed, heading = self.path_follower(self.ttbot_pose, current_goal)
-                speed = 0.25 * speed
+                speed = 0.5 * speed
             else:
                 print("target waypoint:", idx)
                 # Route to waypoint (speed and heading)
